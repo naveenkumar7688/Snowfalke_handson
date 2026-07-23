@@ -1,0 +1,761 @@
+-- Tasty Bytes practice queries for database setup, ingestion, views, and dynamic tables
+-- Co-authored with CoCo
+USE ROLE accountadmin;
+
+USE WAREHOUSE compute_wh;
+
+---> create the Tasty Bytes Database
+CREATE OR REPLACE DATABASE tasty_bytes_sample_data;
+
+---> create the Raw POS (Point-of-Sale) Schema
+CREATE OR REPLACE SCHEMA tasty_bytes_sample_data.raw_pos;
+
+---> create the Raw Menu Table
+CREATE OR REPLACE TABLE tasty_bytes_sample_data.raw_pos.menu
+(
+    menu_id NUMBER(19,0),
+    menu_type_id NUMBER(38,0),
+    menu_type VARCHAR(16777216),
+    truck_brand_name VARCHAR(16777216),
+    menu_item_id NUMBER(38,0),
+    menu_item_name VARCHAR(16777216),
+    item_category VARCHAR(16777216),
+    item_subcategory VARCHAR(16777216),
+    cost_of_goods_usd NUMBER(38,4),
+    sale_price_usd NUMBER(38,4),
+    menu_item_health_metrics_obj VARIANT
+);
+
+---> create the Stage referencing the Blob location and CSV File Format
+CREATE OR REPLACE STAGE tasty_bytes_sample_data.public.blob_stage
+url = 's3://sfquickstarts/tastybytes/'
+file_format = (type = csv);
+
+---> query the Stage to find the Menu CSV file
+LIST @tasty_bytes_sample_data.public.blob_stage/raw_pos/menu/;
+
+---> copy the Menu file into the Menu table
+COPY INTO tasty_bytes_sample_data.raw_pos.menu
+FROM @tasty_bytes_sample_data.public.blob_stage/raw_pos/menu/;
+
+select * from tasty_bytes_sample_data.raw_pos.menu where item_category='Snack'
+and  item_subcategory ='Warm Option';
+
+select item_subcategory,max(sale_price_usd) from tasty_bytes_sample_data.raw_pos.menu 
+group by 1
+order by 2 desc;
+
+create warehouse warehouse_one;
+
+show warehouses;
+
+create warehouse warehouse_two;
+
+use warehouse_two;
+
+show warehouses;
+
+drop warehouse warehouse_two;
+
+Alter warehouse warehouse_one set warehouse_size='SMALL';
+Alter warehouse warehouse_one set auto_suspend=120;
+
+-------------------
+
+
+USE ROLE accountadmin;
+
+/*--
+database, schema and warehouse creation
+--*/
+
+-- create tasty_bytes database
+CREATE OR REPLACE DATABASE tasty_bytes;
+
+-- create raw_pos schema
+CREATE OR REPLACE SCHEMA tasty_bytes.raw_pos;
+
+-- create raw_customer schema
+CREATE OR REPLACE SCHEMA tasty_bytes.raw_customer;
+
+-- create harmonized schema
+CREATE OR REPLACE SCHEMA tasty_bytes.harmonized;
+
+-- create analytics schema
+CREATE OR REPLACE SCHEMA tasty_bytes.analytics;
+
+-- create warehouse for ingestion
+CREATE OR REPLACE WAREHOUSE demo_build_wh
+    WAREHOUSE_SIZE = 'xlarge'
+    WAREHOUSE_TYPE = 'standard'
+    AUTO_SUSPEND = 60
+    AUTO_RESUME = TRUE
+    INITIALLY_SUSPENDED = TRUE;
+
+/*--
+file format and stage creation
+--*/
+
+CREATE OR REPLACE FILE FORMAT tasty_bytes.public.csv_ff 
+type = 'csv';
+
+CREATE OR REPLACE STAGE tasty_bytes.public.s3load
+url = 's3://sfquickstarts/tasty-bytes-builder-education/'
+file_format = tasty_bytes.public.csv_ff;
+
+/*--
+ raw zone table build 
+--*/
+
+-- country table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.country
+(
+    country_id NUMBER(18,0),
+    country VARCHAR(16777216),
+    iso_currency VARCHAR(3),
+    iso_country VARCHAR(2),
+    city_id NUMBER(19,0),
+    city VARCHAR(16777216),
+    city_population VARCHAR(16777216)
+);
+
+-- franchise table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.franchise 
+(
+    franchise_id NUMBER(38,0),
+    first_name VARCHAR(16777216),
+    last_name VARCHAR(16777216),
+    city VARCHAR(16777216),
+    country VARCHAR(16777216),
+    e_mail VARCHAR(16777216),
+    phone_number VARCHAR(16777216) 
+);
+
+-- location table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.location
+(
+    location_id NUMBER(19,0),
+    placekey VARCHAR(16777216),
+    location VARCHAR(16777216),
+    city VARCHAR(16777216),
+    region VARCHAR(16777216),
+    iso_country_code VARCHAR(16777216),
+    country VARCHAR(16777216)
+);
+
+-- menu table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.menu
+(
+    menu_id NUMBER(19,0),
+    menu_type_id NUMBER(38,0),
+    menu_type VARCHAR(16777216),
+    truck_brand_name VARCHAR(16777216),
+    menu_item_id NUMBER(38,0),
+    menu_item_name VARCHAR(16777216),
+    item_category VARCHAR(16777216),
+    item_subcategory VARCHAR(16777216),
+    cost_of_goods_usd NUMBER(38,4),
+    sale_price_usd NUMBER(38,4),
+    menu_item_health_metrics_obj VARIANT
+);
+
+-- truck table build 
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.truck
+(
+    truck_id NUMBER(38,0),
+    menu_type_id NUMBER(38,0),
+    primary_city VARCHAR(16777216),
+    region VARCHAR(16777216),
+    iso_region VARCHAR(16777216),
+    country VARCHAR(16777216),
+    iso_country_code VARCHAR(16777216),
+    franchise_flag NUMBER(38,0),
+    year NUMBER(38,0),
+    make VARCHAR(16777216),
+    model VARCHAR(16777216),
+    ev_flag NUMBER(38,0),
+    franchise_id NUMBER(38,0),
+    truck_opening_date DATE
+);
+
+-- order_header table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.order_header
+(
+    order_id NUMBER(38,0),
+    truck_id NUMBER(38,0),
+    location_id FLOAT,
+    customer_id NUMBER(38,0),
+    discount_id VARCHAR(16777216),
+    shift_id NUMBER(38,0),
+    shift_start_time TIME(9),
+    shift_end_time TIME(9),
+    order_channel VARCHAR(16777216),
+    order_ts TIMESTAMP_NTZ(9),
+    served_ts VARCHAR(16777216),
+    order_currency VARCHAR(3),
+    order_amount NUMBER(38,4),
+    order_tax_amount VARCHAR(16777216),
+    order_discount_amount VARCHAR(16777216),
+    order_total NUMBER(38,4)
+);
+
+-- order_detail table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_pos.order_detail 
+(
+    order_detail_id NUMBER(38,0),
+    order_id NUMBER(38,0),
+    menu_item_id NUMBER(38,0),
+    discount_id VARCHAR(16777216),
+    line_number NUMBER(38,0),
+    quantity NUMBER(5,0),
+    unit_price NUMBER(38,4),
+    price NUMBER(38,4),
+    order_item_discount_amount VARCHAR(16777216)
+);
+
+-- customer loyalty table build
+CREATE OR REPLACE TABLE tasty_bytes.raw_customer.customer_loyalty
+(
+    customer_id NUMBER(38,0),
+    first_name VARCHAR(16777216),
+    last_name VARCHAR(16777216),
+    city VARCHAR(16777216),
+    country VARCHAR(16777216),
+    postal_code VARCHAR(16777216),
+    preferred_language VARCHAR(16777216),
+    gender VARCHAR(16777216),
+    favourite_brand VARCHAR(16777216),
+    marital_status VARCHAR(16777216),
+    children_count VARCHAR(16777216),
+    sign_up_date DATE,
+    birthday_date DATE,
+    e_mail VARCHAR(16777216),
+    phone_number VARCHAR(16777216)
+);
+
+/*--
+harmonized view creation
+--*/
+
+-- orders_v view
+CREATE OR REPLACE VIEW tasty_bytes.harmonized.orders_v
+    AS
+SELECT 
+    oh.order_id,
+    oh.truck_id,
+    oh.order_ts,
+    od.order_detail_id,
+    od.line_number,
+    m.truck_brand_name,
+    m.menu_type,
+    t.primary_city,
+    t.region,
+    t.country,
+    t.franchise_flag,
+    t.franchise_id,
+    f.first_name AS franchisee_first_name,
+    f.last_name AS franchisee_last_name,
+    l.location_id,
+    cl.customer_id,
+    cl.first_name,
+    cl.last_name,
+    cl.e_mail,
+    cl.phone_number,
+    cl.children_count,
+    cl.gender,
+    cl.marital_status,
+    od.menu_item_id,
+    m.menu_item_name,
+    od.quantity,
+    od.unit_price,
+    od.price,
+    oh.order_amount,
+    oh.order_tax_amount,
+    oh.order_discount_amount,
+    oh.order_total
+FROM tasty_bytes.raw_pos.order_detail od
+JOIN tasty_bytes.raw_pos.order_header oh
+    ON od.order_id = oh.order_id
+JOIN tasty_bytes.raw_pos.truck t
+    ON oh.truck_id = t.truck_id
+JOIN tasty_bytes.raw_pos.menu m
+    ON od.menu_item_id = m.menu_item_id
+JOIN tasty_bytes.raw_pos.franchise f
+    ON t.franchise_id = f.franchise_id
+JOIN tasty_bytes.raw_pos.location l
+    ON oh.location_id = l.location_id
+LEFT JOIN tasty_bytes.raw_customer.customer_loyalty cl
+    ON oh.customer_id = cl.customer_id;
+
+-- loyalty_metrics_v view
+CREATE OR REPLACE VIEW tasty_bytes.harmonized.customer_loyalty_metrics_v
+    AS
+SELECT 
+    cl.customer_id,
+    cl.city,
+    cl.country,
+    cl.first_name,
+    cl.last_name,
+    cl.phone_number,
+    cl.e_mail,
+    SUM(oh.order_total) AS total_sales,
+    ARRAY_AGG(DISTINCT oh.location_id) AS visited_location_ids_array
+FROM tasty_bytes.raw_customer.customer_loyalty cl
+JOIN tasty_bytes.raw_pos.order_header oh
+ON cl.customer_id = oh.customer_id
+GROUP BY cl.customer_id, cl.city, cl.country, cl.first_name,
+cl.last_name, cl.phone_number, cl.e_mail;
+
+/*--
+analytics view creation
+--*/
+
+-- orders_v view
+CREATE OR REPLACE VIEW tasty_bytes.analytics.orders_v
+COMMENT = 'Tasty Bytes Order Detail View'
+    AS
+SELECT DATE(o.order_ts) AS date, * FROM tasty_bytes.harmonized.orders_v o;
+
+-- customer_loyalty_metrics_v view
+CREATE OR REPLACE VIEW tasty_bytes.analytics.customer_loyalty_metrics_v
+COMMENT = 'Tasty Bytes Customer Loyalty Member Metrics View'
+    AS
+SELECT * FROM tasty_bytes.harmonized.customer_loyalty_metrics_v;
+
+/*--
+ raw zone table load 
+--*/
+
+USE WAREHOUSE demo_build_wh;
+
+-- country table load
+COPY INTO tasty_bytes.raw_pos.country
+FROM @tasty_bytes.public.s3load/raw_pos/country/;
+
+-- franchise table load
+COPY INTO tasty_bytes.raw_pos.franchise
+FROM @tasty_bytes.public.s3load/raw_pos/franchise/;
+
+-- location table load
+COPY INTO tasty_bytes.raw_pos.location
+FROM @tasty_bytes.public.s3load/raw_pos/location/;
+
+-- menu table load
+COPY INTO tasty_bytes.raw_pos.menu
+FROM @tasty_bytes.public.s3load/raw_pos/menu/;
+
+-- truck table load
+COPY INTO tasty_bytes.raw_pos.truck
+FROM @tasty_bytes.public.s3load/raw_pos/truck/;
+
+-- customer_loyalty table load
+COPY INTO tasty_bytes.raw_customer.customer_loyalty
+FROM @tasty_bytes.public.s3load/raw_customer/customer_loyalty/;
+
+-- order_header table load
+COPY INTO tasty_bytes.raw_pos.order_header
+FROM @tasty_bytes.public.s3load/raw_pos/subset_order_header/;
+
+-- order_detail table load
+COPY INTO tasty_bytes.raw_pos.order_detail
+FROM @tasty_bytes.public.s3load/raw_pos/subset_order_detail/;
+
+DROP WAREHOUSE demo_build_wh;
+
+
+select * from tasty_bytes.raw_pos.order_detail limit 10;
+
+
+
+USE WAREHOUSE compute_wh;
+CREATE DATABASE test_ingestion;
+CREATE OR REPLACE FILE FORMAT test_ingestion.public.csv_ff
+type = 'csv';
+
+
+ CREATE or REPLACE STAGE test_stage
+ url='s3://sfquickstarts/tasty-bytes-builder-education/raw_pos/truck',
+ file_format=test_ingestion.public.csv_ff;
+
+ls @test_stage;
+
+
+-- truck table buildTEST_INGESTION
+CREATE OR REPLACE TABLE test_ingestion.public.truck
+(
+    truck_id NUMBER(38,0),
+    menu_type_id NUMBER(38,0),
+    primary_city VARCHAR(16777216),
+    region VARCHAR(16777216),
+    iso_region VARCHAR(16777216),
+    country VARCHAR(16777216),
+    iso_country_code VARCHAR(16777216),
+    franchise_flag NUMBER(38,0),
+    year NUMBER(38,0),
+    make VARCHAR(16777216),
+    model VARCHAR(16777216),
+    ev_flag NUMBER(38,0),
+    franchise_id NUMBER(38,0),
+    truck_opening_date DATE
+);
+
+copy into test_ingestion.public.truck 
+from @test_ingestion.public.test_stage;
+
+create database test_database;
+
+show databases;
+
+drop database test_database;
+
+UNDROP database test_database;
+
+create database test_database_2;
+
+use database test_database;
+
+create or replace schema test_database.test_schema;
+
+show schemas;
+
+describe database test_database;
+
+drop schema test_database.test_schema;
+
+undrop schema test_database.test_schema;
+
+
+CREATE DATABASE test_database;
+CREATE SCHEMA test_database.test_schema;
+
+CREATE TABLE TEST_TABLE (
+	TEST_NUMBER NUMBER,
+	TEST_VARCHAR VARCHAR,
+	TEST_BOOLEAN BOOLEAN,
+	TEST_DATE DATE,
+	TEST_VARIANT VARIANT,
+	TEST_GEOGRAPHY GEOGRAPHY
+);
+INSERT INTO TEST_DATABASE.TEST_SCHEMA.TEST_TABLE
+  VALUES
+  (28, 'ha!', True, '2024-01-01', NULL, NULL);
+
+select * from TEST_TABLE;
+
+show tables in test_database.test_schema;
+
+show tables;
+
+Drop table test_table;
+
+unDrop table test_table;
+
+----VIews----
+create view truck_franchise as 
+SELECT
+    t.*,
+    f.first_name AS franchisee_first_name,
+    f.last_name AS franchisee_last_name
+FROM tasty_bytes.raw_pos.truck t
+JOIN tasty_bytes.raw_pos.franchise f
+    ON t.franchise_id = f.franchise_id;
+
+select make from truck_franchise where franchisee_first_name='Sara' and franchisee_last_name='Nicholson';
+
+Describe view test_database.test_schema.truck_franchise;
+
+DROP view test_database.test_schema.truck_franchise;
+
+----Dynamic table---
+
+create or replace dynamic table truck_franchise_dynamic
+TARGET_LAG = '1 minute'
+WAREHOUSE = COMPUTE_WH
+AS
+SELECT
+    t.*,
+    f.first_name AS franchisee_first_name,
+    f.last_name AS franchisee_last_name
+FROM tasty_bytes.raw_pos.truck t
+JOIN tasty_bytes.raw_pos.franchise f
+    ON t.franchise_id = f.franchise_id;
+
+CREATE OR REPLACE DYNAMIC TABLE test_database.test_schema.nissan 
+TARGET_LAG = '5 minutes' 
+WAREHOUSE = compute_wh 
+AS SELECT t.* 
+FROM tasty_bytes.raw_pos.truck t 
+WHERE t.make = 'Nissan';
+
+select count(*) from test_database.test_schema.nissan ;
+
+DROP DYNAMIC TABLE test_database.test_schema.nissan
+
+drop database tasty_bytes_sample_data;
+
+
+use database tasty_bytes;
+
+select * from tasty_bytes.raw_pos.menu;
+
+DESCRIBE TABLE tasty_bytes.raw_pos.menu;
+
+select typeof(menu_item_health_metrics_obj) from tasty_bytes.raw_pos.menu;
+
+drop database test_database;
+
+SELECT menu_item_health_metrics_obj:menu_item_health_metrics [0].ingredients[0]
+FROM tasty_bytes.raw_pos.menu
+WHERE MENU_ITEM_NAME = 'Mango Sticky Rice';
+
+
+SELECT * from tasty_bytes.raw_pos.menu
+WHERE MENU_ITEM_NAME = 'Mango Sticky Rice'; 
+
+---lateral flatten example---
+SELECT  m.menu_type,
+f.value::STRING as ingredients
+from tasty_bytes.raw_pos.menu m,
+lateral flatten (input => m.menu_item_health_metrics_obj:menu_item_health_metrics[0].ingredients) f
+WHERE m.MENU_ITEM_NAME = 'Mango Sticky Rice';
+
+----git hub integration---
+--API integration steps---
+USE ROLE ACCOUNTADMIN;
+
+--Step 1: Create a Secret for Git Authentication
+CREATE OR REPLACE SECRET github_secret
+TYPE = PASSWORD
+USERNAME = 'your_github_username'
+PASSWORD = 'your_github_pat';
+
+--Step 2: Create an API Integration
+CREATE OR REPLACE API INTEGRATION git_integration
+API_PROVIDER = git_https_api
+API_ALLOWED_PREFIXES = ('https://github.com/your-org')
+ALLOWED_AUTHENTICATION_SECRETS = (github_secret)
+ENABLED = TRUE;
+
+--Step 3: Create the Git Repository Clone
+
+CREATE OR REPLACE GIT REPOSITORY my_repo
+API_INTEGRATION = git_integration
+ORIGIN = 'https://github.com/your-org/your-repo.git'
+GIT_CREDENTIALS = github_secret;
+
+--Step 4: Fetch Latest Changes
+ALTER GIT REPOSITORY my_repo FETCH;
+
+--Step 5: Verify Files
+LS @my_repo/branches/main;
+--common commands--
+-- Refresh repository
+ALTER GIT REPOSITORY my_repo FETCH;
+
+-- Show repository details
+SHOW GIT REPOSITORIES;
+
+-- List files
+LS @my_repo/branches/main;
+  
+SELECT menu_item_health_metrics_obj:menu_item_health_metrics [0].ingredients[0]
+FROM tasty_bytes.raw_pos.menu
+WHERE MENU_ITEM_NAME = 'Mango Sticky Rice'; 
+
+
+-------------SNOWFLAKE FEATURES--------------
+
+----TIME travel---
+CREATE TABLE tasty_bytes.raw_pos.truck_dev
+    CLONE tasty_bytes.raw_pos.truck;
+    
+SELECT * FROM tasty_bytes.raw_pos.truck_dev;
+--VARIABLE SETTING AND INITIALIZINS 
+SET saved_query_id = LAST_QUERY_ID();
+
+select $saved_query_id;
+
+SET saved_timestamp = CURRENT_TIMESTAMP;
+
+select $saved_timestamp;
+
+UPDATE tasty_bytes.raw_pos.truck_dev t
+    SET t.year = (YEAR(CURRENT_DATE()) -1000);
+
+select * from tasty_bytes.raw_pos.truck;
+
+
+select * from tasty_bytes.raw_pos.truck_dev
+AT(TIMESTAMP=>$saved_timestamp);
+
+select * from tasty_bytes.raw_pos.truck_dev
+AT(TIMESTAMP=>'2026-06-24 09:11:51.645 -0700'::timestamp_ltz);
+
+select * from tasty_bytes.raw_pos.truck_dev
+AT(OFFSET=>-300);---TIME IN SECS
+
+select * from tasty_bytes.raw_pos.truck_dev
+BEFORE(STATEMENT=>$saved_query_id);--- QUERY ID
+
+SHOW VARIABLES;
+
+create table tasty_bytes.raw_pos.truck_dev_1 as
+select * from tasty_bytes.raw_pos.truck_dev
+BEFORE(STATEMENT=>$saved_query_id);
+
+
+ALTER TABLE tasty_bytes.raw_pos.truck_dev_1 RENAME TO tasty_bytes.raw_pos.truck_dev;
+
+---Drop table tasty_bytes.raw_pos.truck_dev;
+
+----Permanant tables, transient tables and temprorary tables----
+
+create transient table tasty_bytes.raw_pos.truck_transient
+clone tasty_bytes.raw_pos.truck;
+
+
+----Permanant tables, transient tables and temprorary tables----
+
+create temporary table tasty_bytes.raw_pos.truck_temporary
+clone tasty_bytes.raw_pos.truck;
+
+alter table tasty_bytes.raw_pos.truck_temporary set data_retention_time_in_days=90;---0 to 1 daysonly allowed
+alter table tasty_bytes.raw_pos.truck_transient set data_retention_time_in_days=90;---0 to 1 daysonly allowed
+
+
+----Cloning---
+
+CREATE DATABASE tasty_bytes_clone CLONE tasty_bytes; 
+
+CREATE TABLe tasty_bytes.raw_pos.truck_clone CLONE tasty_bytes.raw_pos.truck;
+
+SELECT * FROM TASTY_BYTES.INFORMATION_SCHEMA.TABLE_STORAGE_METRICS
+WHERE (TABLE_NAME = 'TRUCK_CLONE' OR TABLE_NAME = 'TRUCK')
+AND TABLE_CATALOG = 'TASTY_BYTES';
+
+SELECT * FROM TASTY_BYTES.INFORMATION_SCHEMA.TABLES
+WHERE (TABLE_NAME = 'TRUCK_CLONE' OR TABLE_NAME = 'TRUCK')
+;
+
+----Resource monitors----
+CREATE RESOURCE MONITOR tasty_test_rm
+  WITH CREDIT_QUOTA = 15
+  FREQUENCY = DAILY
+  START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS
+    ON 90 PERCENT DO NOTIFY
+    ON 100 PERCENT DO SUSPEND
+    ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+
+SHOW RESOURCE MONITORS
+
+
+CREATE WAREHOUSE tasty_test_wh
+  WITH WAREHOUSE_SIZE = 'XSMALL';
+
+  ALTER WAREHOUSE tasty_test_wh
+  SET RESOURCE_MONITOR = tasty_test_rm;
+
+SHOW RESOURCE MONITORS;
+
+
+ALTER RESOURCE MONITOR tasty_test_rm
+  SET CREDIT_QUOTA = 20;
+
+Drop RESOURCE MONITOR tasty_test_rm;
+
+-----UDFs & UDTFs ----
+
+SHOW FUNCTIONS ;
+
+use database tasty_bytes;
+--udf--
+create function min_menu_price() 
+returns number(5,2)
+language sql
+as
+$$
+SELECT MIN(SALE_PRICE_USD) FROM TASTY_BYTES.RAW_POS.MENU
+$$
+
+select min_menu_price();
+
+SHOW FUNCTIONS ;
+
+--udtf--
+create function menu_prices_below (price_ceiling number)
+returns TABLE (item VARCHAR, price NUMBER)
+language sql
+as
+$$
+SELECT MENU_ITEM_NAME, SALE_PRICE_USD
+    FROM TASTY_BYTES.RAW_POS.MENU
+    WHERE SALE_PRICE_USD < price_ceiling
+    ORDER BY 2 DESC
+$$
+
+
+SELECT * FROM TABLE(menu_prices_below(3));
+
+----SP/STored procedure---
+
+Create database tasty_bytes_clone 
+clone tasty_bytes;
+
+
+CREATE OR REPLACE PROCEDURE increase_prices()
+RETURNS BOOLEAN
+LANGUAGE SQL
+as
+$$
+BEGIN
+
+UPDATE tasty_bytes_clone.raw_pos.menu
+SET SALE_PRICE_USD = menu.SALE_PRICE_USD + 1;
+
+END
+$$
+
+call increase_prices();
+
+DESCRIBE PROCEDURE  increase_prices();
+
+
+CREATE OR REPLACE PROCEDURE decrease_mango_sticky_rice_price()
+RETURNS BOOLEAN
+LANGUAGE SQL
+AS
+$$
+BEGIN
+update tasty_bytes_clone.raw_pos.menu
+set sale_price_usd=sale_price_usd-1
+where menu_item_name='Mango Sticky Rice';
+
+END
+$$
+
+show procedures;
+Select * from tasty_bytes_clone.raw_pos.menu where menu_item_name='Mango Sticky Rice';
+
+-----RBAC---
+
+CREATE ROLE tasty_role;
+
+SHOW GRANTS TO ROLE tasty_role;
+
+GRANT CREATE DATABASE ON ACCOUNT TO tasty_role;
+
+SHOW GRANTS TO ROLE USERADMIN;
+
+SELECT CURRENT_USER; ---NAVEEN7688
+
+GRANT ROLE tasty_role TO USER NAVEEN7688;
+
+USE ROLE tasty_role;
+
+CREATE WAREHOUSE tasty_test_wh;
+
+ SHOW GRANTS TO USER NAVEEN7688
+ 
+ 
+
