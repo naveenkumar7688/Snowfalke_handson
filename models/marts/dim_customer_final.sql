@@ -19,7 +19,7 @@ order_header as (
         customer_id,
         order_ts,
         order_total
-    from {{ ref('order_header') }}
+    from {{ ref('staging_order_header') }}
 
 ),
 
