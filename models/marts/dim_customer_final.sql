@@ -8,7 +8,7 @@ with customer_loyalty as (
         country,
         e_mail,
         sign_up_date
-    from tasty_bytes.raw_customer.customer_loyalty
+    from {{ref('staging_customer_loyality')}}
 
 ),
 
