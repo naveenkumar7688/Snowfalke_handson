@@ -6,4 +6,4 @@ select
     country,
     e_mail,
     sign_up_date
-from tasty_bytes.raw_customer.customer_loyalty
+from {{ source('src_customer_loyality', 'customer_loyalty') }}

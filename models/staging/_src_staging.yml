@@ -1,0 +1,11 @@
+sources:
+  - name: src_order_header
+    database: TASTY_BYTES
+    schema: raw_pos
+    tables:
+      - name: order_header
+  - name: src_customer_loyality
+    database: TASTY_BYTES
+    schema: raw_customer
+    tables:
+      - name: customer_loyalty
