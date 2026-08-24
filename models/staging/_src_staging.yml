@@ -4,19 +4,37 @@ sources:
     schema: raw_pos
     tables:
       - name: order_header
+        columns:
+          - name: order_id
+            data_tests:
+              - unique
+              - not_null
+        #config:
+        #  freshness:
+        #    warn_after:
+        #      count: 1
+        #      period: day
+        #    error_after:
+        #      count: 15
+        #      period: day
+        #  loaded_at_field: ORDER_TS
+
   - name: src_customer_loyality
     database: TASTY_BYTES
     schema: raw_customer
-    config:
-      freshness:
-        warn_after:
-          count: 1
-          period: day
-        error_after:
-          count: 10
-          period: day
-      loaded_at_field: SIGN_UP_DATE
     tables:
       - name: customer_loyalty
-        config:
-          freshness: null
+        columns:
+          - name: customer_id
+            data_tests:
+              - unique
+              - not_null
+        #config:
+        #  freshness:
+        #    warn_after:
+        #      count: 1
+        #      period: day
+        #    error_after:
+        #      count: 10
+        #      period: day
+        #  loaded_at_field: sign_up_date
