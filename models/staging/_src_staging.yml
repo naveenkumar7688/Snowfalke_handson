@@ -7,5 +7,16 @@ sources:
   - name: src_customer_loyality
     database: TASTY_BYTES
     schema: raw_customer
+    config:
+      freshness:
+        warn_after:
+          count: 1
+          period: day
+        error_after:
+          count: 10
+          period: day
+      loaded_at_field: SIGN_UP_DATE
     tables:
       - name: customer_loyalty
+        config:
+          freshness: null
