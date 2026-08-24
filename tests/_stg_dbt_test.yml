@@ -1,0 +1,20 @@
+models:
+  - name: staging_customer_loyality
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: staging_order_header
+    columns:
+      - name: order_id
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('staging_customer_loyality')
+                field: customer_id

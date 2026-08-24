@@ -8,7 +8,7 @@ with customer_loyalty as (
         country,
         e_mail,
         sign_up_date
-    from tasty_bytes.raw_customer.customer_loyalty
+    from {{ref('staging_customer_loyality')}}
 
 ),
 
@@ -19,7 +19,7 @@ order_header as (
         customer_id,
         order_ts,
         order_total
-    from {{ ref('order_header') }}
+    from {{ ref('staging_order_header') }}
 
 ),
 

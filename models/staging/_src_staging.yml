@@ -1,0 +1,43 @@
+sources:
+  - name: src_order_header
+    description: This is the source yaml for order_header source 
+    database: TASTY_BYTES
+    schema: raw_pos
+    tables:
+      - name: order_header
+        columns:
+          - name: order_id
+            data_tests:
+              - unique
+              - not_null
+        #config:
+        #  freshness:
+        #    warn_after:
+        #      count: 1
+        #      period: day
+        #    error_after:
+        #      count: 15
+        #      period: day
+        #  loaded_at_field: ORDER_TS
+
+  - name: src_customer_loyality
+    description: "{{ doc(customer_loyalty) }}"
+    database: TASTY_BYTES
+    schema: raw_customer
+    tables:
+      - name: customer_loyalty
+        columns:
+          - name: customer_id
+            description: 
+            data_tests:
+              - unique
+              - not_null
+        #config:
+        #  freshness:
+        #    warn_after:
+        #      count: 1
+        #      period: day
+        #    error_after:
+        #      count: 10
+        #      period: day
+        #  loaded_at_field: sign_up_date

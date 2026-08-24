@@ -4,4 +4,4 @@ select
     truck_id,
     order_ts,
     order_total
-from tasty_bytes.raw_pos.order_header
+from {{ source('src_order_header', 'order_header') }}
