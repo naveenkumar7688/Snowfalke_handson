@@ -1,5 +1,6 @@
 sources:
   - name: src_order_header
+    description: This is the source yaml for order_header source 
     database: TASTY_BYTES
     schema: raw_pos
     tables:
@@ -20,12 +21,14 @@ sources:
         #  loaded_at_field: ORDER_TS
 
   - name: src_customer_loyality
+    description: "{{ doc(customer_loyalty) }}"
     database: TASTY_BYTES
     schema: raw_customer
     tables:
       - name: customer_loyalty
         columns:
           - name: customer_id
+            description: 
             data_tests:
               - unique
               - not_null
